@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const consultationsController = require('../controllers/consultationsController');
+const consultationsController = require('../controllers/ConsultationsController');
 
 // Rota para obter todas as consultas
 router.get('/consultations', consultationsController.getConsultations);
