@@ -1,55 +1,79 @@
 const db = require('../db/database');
 
-// Obter todas as consultas
-exports.getConsultations = (req, res) => {
-  db.all('SELECT * FROM consultations', [], (err, rows) => {
+// Obter consultas com verificação direta de role e userId
+const getAllConsultations = (req, res) => {
+  const { userId, role } = req.headers; // Pegando do header da requisição
+
+  if (!userId || !role) {
+    return res.status(401).json({ error: 'Informações de autenticação ausentes.' });
+  }
+
+  let sql;
+  let params = [];
+
+  if (role === 'admin') {
+    // Admin pode ver todas as consultas
+    sql = `SELECT consultations.*, users.username 
+           FROM consultations 
+           JOIN users ON consultations.userId = users.id`;
+  } else if (role === 'user') {
+    // Usuário comum só pode ver suas próprias consultas
+    sql = `SELECT consultations.*, users.username 
+           FROM consultations 
+           JOIN users ON consultations.userId = users.id 
+           WHERE consultations.userId = ?`;
+    params = [userId];
+  } else {
+    return res.status(403).json({ error: 'Permissão negada.' });
+  }
+
+  db.all(sql, params, (err, rows) => {
     if (err) {
-      console.error(err.message);
-      res.status(500).json({ error: 'Erro ao obter consultas' });
-    } else {
-      res.json(rows);
+      return res.status(500).json({ error: err.message });
     }
+    res.json({ consultations: rows });
   });
 };
 
-// Criar uma nova consulta
-exports.createConsultation = (req, res) => {
-  const { doctor, date, status, userId } = req.body;
-  db.run('INSERT INTO consultations (doctor, date, status, userId) VALUES (?, ?, ?, ?)', [doctor, date, status, userId], function (err) {
+// Criar nova consulta
+const createConsultation = (req, res) => {
+  const { userId, date, doctor, specialty, status } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'ID do usuário é obrigatório.' });
+  }
+
+  const sql = `INSERT INTO consultations (userId, date, doctor, specialty, status) 
+               VALUES (?, ?, ?, ?, ?)`;
+  const params = [userId, date, doctor, specialty, status];
+
+  db.run(sql, params, function (err) {
     if (err) {
-      console.error(err.message);
-      res.status(500).json({ error: 'Erro ao criar consulta' });
-    } else {
-      res.status(201).json({ message: 'Consulta criada com sucesso', id: this.lastID });
+      return res.status(400).json({ error: err.message });
     }
+    res.json({
+      message: 'Consulta criada com sucesso!',
+      consultationId: this.lastID,
+    });
   });
 };
 
-// Atualizar consulta
-exports.updateConsultation = (req, res) => {
+// Atualizar uma consulta
+const updateConsultation = (req, res) => {
   const { id } = req.params;
-  const { doctor, date, status } = req.body;
+  const { date, doctor, specialty, status, userId } = req.body;
 
-  db.run('UPDATE consultations SET doctor = ?, date = ?, status = ? WHERE id = ?', [doctor, date, status, id], function (err) {
+  const sql = `UPDATE consultations 
+               SET date = ?, doctor = ?, specialty = ?, status = ?, userId = ? 
+               WHERE id = ?`;
+  const params = [date, doctor, specialty, status, userId, id];
+
+  db.run(sql, params, function (err) {
     if (err) {
-      console.error(err.message);
-      res.status(500).json({ error: 'Erro ao atualizar consulta' });
-    } else {
-      res.status(200).json({ message: 'Consulta atualizada com sucesso' });
+      return res.status(400).json({ error: err.message });
     }
+    res.json({ message: 'Consulta atualizada com sucesso.' });
   });
 };
 
-// Deletar consulta
-exports.deleteConsultation = (req, res) => {
-  const { id } = req.params;
-
-  db.run('DELETE FROM consultations WHERE id = ?', [id], function (err) {
-    if (err) {
-      console.error(err.message);
-      res.status(500).json({ error: 'Erro ao deletar consulta' });
-    } else {
-      res.status(200).json({ message: 'Consulta deletada com sucesso' });
-    }
-  });
-};
+module.exports = { getAllConsultations, createConsultation, updateConsultation };
